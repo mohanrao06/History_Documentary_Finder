@@ -21,53 +21,58 @@ def recommend():
     
     data = request.get_json()
     interest = data.get('interest', '').strip()
-    mode = data.get('mode', 'youtube')
     
     if not interest:
         return jsonify({
-            'error': 'Please enter a search term',
-            'type': mode
+            'error': 'Please enter a search term'
         })
     
     try:
-        if mode == 'youtube':
-            videos = fetch_documentaries(interest)
-            if not videos:
-                return jsonify({
-                    'type': 'youtube',
-                    'results': [],
-                    'error': 'No documentaries found'
-                })
-            recommendations = recommend_videos(videos, interest)
+        # Fetch YouTube videos
+        videos = fetch_documentaries(interest)
+        if not videos:
             return jsonify({
-                'results': recommendations,
-                'type': 'youtube'
+                'results': [],
+                'error': 'No documentaries found'
             })
-        else:
+        
+        # Get recommended videos
+        recommended_videos = recommend_videos(videos, interest)
+        
+        # Generate summaries and ratings for each video
+        enhanced_videos = []
+        for video in recommended_videos:
             prompt = (
-                f"Provide a detailed, factual historical overview about {interest}. "
-                "Include: \n"
-                "1. Key events and timeline\n"
-                "2. Important figures\n"
-                "3. Historical significance\n"
-                "4. Lasting impacts\n\n"
-                "Format with clear paragraphs and section headings."
+                f"Provide a concise summary (2-3 sentences) and a rating out of 10 "
+                f"for this documentary about {interest} titled '{video['snippet']['title']}'. "
+                f"Description: {video['snippet']['description'][:200]}... "
+                "The rating should be based on how well it covers the topic, production quality, "
+                "and historical accuracy. Format as: 'Summary: [summary text] Rating: X/10'"
             )
+            
             ai_response = get_ai_response(prompt)
             
-            if isinstance(ai_response, dict) and 'error' in ai_response:
-                return jsonify(ai_response)
-                
-            return jsonify({
-                'results': ai_response,
-                'type': 'ai'
-            })
+            enhanced_video = {
+                'video': video,
+                'summary': ai_response if isinstance(ai_response, str) else "Summary not available",
+                'rating': extract_rating(ai_response) if isinstance(ai_response, str) else "N/A"
+            }
+            enhanced_videos.append(enhanced_video)
+            
+        return jsonify({
+            'results': enhanced_videos
+        })
             
     except Exception as e:
         return jsonify({
-            'error': str(e),
-            'type': mode
+            'error': str(e)
         })
+
+def extract_rating(text):
+    # Helper function to extract rating from AI response
+    import re
+    match = re.search(r'Rating:\s*(\d+/10)', text)
+    return match.group(1) if match else "N/A"
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
