@@ -1,20 +1,86 @@
 document.addEventListener('DOMContentLoaded', () => {
     const input = document.getElementById('interest');
     const sendBtn = document.getElementById('send-btn');
+    const themeToggle = document.getElementById('theme-toggle');
+    const voiceBtn = document.getElementById('voice-btn');
     
+    // Theme toggle functionality remains exactly the same
+    themeToggle.addEventListener('click', toggleTheme);
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const savedTheme = localStorage.getItem('theme');
+    const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', initialTheme);
+    updateThemeIcon(initialTheme);
+    
+    // Existing event listeners remain the same
     sendBtn.addEventListener('click', handleSearch);
-    
     input.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') handleSearch();
     });
-    
-    document.querySelectorAll('.mode-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
-        });
-    });
+
+    // New Voice Recognition functionality
+    voiceBtn.addEventListener('click', toggleVoiceRecognition);
 });
+
+function toggleVoiceRecognition() {
+    const voiceBtn = document.getElementById('voice-btn');
+    const input = document.getElementById('interest');
+    
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        showError("Voice search is not supported in your browser");
+        return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+
+    if (voiceBtn.classList.contains('listening')) {
+        recognition.stop();
+        voiceBtn.classList.remove('listening');
+        return;
+    }
+
+    recognition.start();
+    voiceBtn.classList.add('listening');
+    addMessage("Listening... Speak now", 'bot');
+
+    recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        input.value = transcript;
+        voiceBtn.classList.remove('listening');
+        handleSearch();
+    };
+
+    recognition.onerror = (event) => {
+        voiceBtn.classList.remove('listening');
+        showError("Voice recognition error: " + event.error);
+    };
+
+    recognition.onend = () => {
+        voiceBtn.classList.remove('listening');
+    };
+}
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+    
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    updateThemeIcon(newTheme);
+}
+
+function updateThemeIcon(theme) {
+    const icon = document.querySelector('#theme-toggle i');
+    if (theme === 'light') {
+        icon.classList.remove('fa-moon');
+        icon.classList.add('fa-sun');
+    } else {
+        icon.classList.remove('fa-sun');
+        icon.classList.add('fa-moon');
+    }
+}
 
 function suggestSearch(topic) {
     document.getElementById('interest').value = topic;
@@ -23,7 +89,6 @@ function suggestSearch(topic) {
 
 async function handleSearch() {
     const interest = document.getElementById('interest').value.trim();
-    const activeMode = document.querySelector('.mode-btn.active').dataset.mode;
     
     if (!interest) return;
     
@@ -39,8 +104,7 @@ async function handleSearch() {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({ 
-                interest,
-                mode: activeMode
+                interest
             })
         });
         
@@ -49,28 +113,21 @@ async function handleSearch() {
         document.getElementById(loadingId)?.remove();
         
         if (data.error) {
-            showError(data.error, activeMode);
-        } else if (data.type === 'youtube') {
-            if (data.results?.length > 0) {
-                addDocumentaryResults(data.results);
-            } else {
-                addMessage("No documentaries found. Try another topic?", 'bot');
-            }
-        } else if (data.type === 'ai') {
-            addMessage(data.results, 'bot');
+            showError(data.error);
+        } else if (data.results?.length > 0) {
+            addDocumentaryResults(data.results);
+        } else {
+            addMessage("No documentaries found. Try another topic?", 'bot');
         }
     } catch (error) {
         document.getElementById(loadingId)?.remove();
-        showError("Network error. Please check your connection.", 'error');
+        showError("Network error. Please check your connection.");
         console.error('Error:', error);
     }
 }
 
-function showError(message, type) {
-    const errorMsg = type === 'ai' ? 
-        `AI Error: ${message}` : 
-        `Error: ${message}`;
-    addMessage(errorMsg, 'bot');
+function showError(message) {
+    addMessage(`Error: ${message}`, 'bot');
 }
 
 function addMessage(text, sender) {
@@ -113,7 +170,7 @@ function addLoadingMessage() {
     return loadingId;
 }
 
-function addDocumentaryResults(videos) {
+function addDocumentaryResults(enhancedVideos) {
     const chatContainer = document.getElementById('chat-container');
     const messageDiv = document.createElement('div');
     messageDiv.className = 'bot-message';
@@ -126,7 +183,8 @@ function addDocumentaryResults(videos) {
             <p>Here are some documentaries you might like:</p>
     `;
     
-    videos.forEach(video => {
+    enhancedVideos.forEach(enhanced => {
+        const video = enhanced.video;
         resultsHTML += `
             <div class="documentary-result">
                 <iframe src="https://www.youtube.com/embed/${video.id.videoId}" 
@@ -136,7 +194,8 @@ function addDocumentaryResults(videos) {
                 </iframe>
                 <div class="documentary-info">
                     <h3>${video.snippet.title}</h3>
-                    <p>${(video.snippet.description || '').substring(0, 150)}...</p>
+                    <p class="summary">${enhanced.summary}</p>
+                    <p class="rating">Rating: ${enhanced.rating}</p>
                     <small>Channel: ${video.snippet.channelTitle}</small>
                 </div>
             </div>
