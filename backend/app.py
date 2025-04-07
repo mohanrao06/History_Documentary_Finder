@@ -6,8 +6,6 @@ app = Flask(__name__, static_folder='../frontend')
 CORS(app)
 
 @app.route('/')
-def home():
-    return "Documentary Finder is running!"
 def serve_index():
     return send_from_directory(app.static_folder, 'index.html')
 
