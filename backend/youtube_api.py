@@ -1,7 +1,7 @@
 import requests
 from datetime import datetime, timedelta
 
-YOUTUBE_API_KEY = "AIzaSyAqlhGyZUTLMn4-AuC_tyMrNl2lv6M2SNQ"
+YOUTUBE_API_KEY = "***"
 
 def fetch_documentaries(query, max_results=10):
     try:
